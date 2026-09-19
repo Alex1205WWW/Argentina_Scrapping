@@ -6,51 +6,44 @@ and foreign MERCOSUR. Cargo units carry their detail under parqueMovilSimplifica
 buses under carroceria. Only the fields the freight database needs are kept.
 
 Resumable: every completed page offset is appended to parque_movil.offsets, so a
-re-run only fetches what is missing.
+re-run only fetches what is missing. A page that never settles is left out of
+that file (and reported), so it is retried on the next run rather than lost.
 """
 from __future__ import annotations
 
 import asyncio
 import json
 
-from common import PAGE, RAW, client, seop_page
+from common import PAGE, RAW, PageFailed, client, dig, seop_page
 
 OUTFILE = RAW / "parque_movil.jsonl"
 DONEFILE = RAW / "parque_movil.offsets"
 CONCURRENCY = 20
 
 
-def _d(o, *path):
-    for p in path:
-        if not isinstance(o, dict):
-            return None
-        o = o.get(p)
-    return o
-
-
 def flatten(r: dict) -> dict:
     s = r.get("parqueMovilSimplificado") or {}
     car = r.get("carroceria") or {}
+    chasis = dig(r, "carroceriaChasis", "chasis") or {}
     return {
         "parque_movil_id": r.get("id"),
         "dominio": (r.get("dominio") or "").strip().upper(),
         "anio_modelo": r.get("anioModelo"),
         "nro_chasis": r.get("nroChasis"),
         "nro_motor": r.get("nroMotor"),
-        "pais": _d(r, "pais", "abrev"),
-        "pais_desc": _d(r, "pais", "descripcion"),
-        "tipo_vehiculo": _d(s, "tipoVehiculo", "descripcion") or _d(car, "tipoVehiculo", "descripcion"),
-        "tipo_vehiculo_abrev": _d(s, "tipoVehiculo", "abrev") or _d(car, "tipoVehiculo", "abrev"),
-        "cantidad_ejes": s.get("cantidadEjes") or _d(r, "carroceriaChasis", "chasis", "cantEjes"),
-        "marca": _d(s, "chasisMarca", "descripcion")
-                 or _d(r, "carroceriaChasis", "chasis", "chasisModelo", "chasisMarca", "descripcion"),
-        "modelo": _d(s, "chasisModelo", "descripcion")
-                  or _d(r, "carroceriaChasis", "chasis", "chasisModelo", "descripcion"),
-        "tipo_carroceria": _d(s, "tipoCarroceria", "descripcion") or _d(car, "tipoCarroceria", "descripcion"),
-        "carroceria_marca": _d(s, "carroceriaMarca", "descripcion") or _d(car, "carroceriaMarca", "descripcion"),
-        "peso_vacio": _d(s, "vehiculoCargaDefault", "pesoVacio"),
-        "carga_util": _d(s, "vehiculoCargaDefault", "cargaUtil"),
-        "peso_maximo": _d(s, "vehiculoCargaDefault", "pesoMaximo"),
+        "pais": dig(r, "pais", "abrev"),
+        "pais_desc": dig(r, "pais", "descripcion"),
+        "tipo_vehiculo": dig(s, "tipoVehiculo", "descripcion") or dig(car, "tipoVehiculo", "descripcion"),
+        "tipo_vehiculo_abrev": dig(s, "tipoVehiculo", "abrev") or dig(car, "tipoVehiculo", "abrev"),
+        "cantidad_ejes": s.get("cantidadEjes") or chasis.get("cantEjes"),
+        "marca": dig(s, "chasisMarca", "descripcion")
+                 or dig(chasis, "chasisModelo", "chasisMarca", "descripcion"),
+        "modelo": dig(s, "chasisModelo", "descripcion") or dig(chasis, "chasisModelo", "descripcion"),
+        "tipo_carroceria": dig(s, "tipoCarroceria", "descripcion") or dig(car, "tipoCarroceria", "descripcion"),
+        "carroceria_marca": dig(s, "carroceriaMarca", "descripcion") or dig(car, "carroceriaMarca", "descripcion"),
+        "peso_vacio": dig(s, "vehiculoCargaDefault", "pesoVacio"),
+        "carga_util": dig(s, "vehiculoCargaDefault", "cargaUtil"),
+        "peso_maximo": dig(s, "vehiculoCargaDefault", "pesoMaximo"),
         "cant_asientos": r.get("cantAsientos"),
     }
 
@@ -67,29 +60,34 @@ async def main() -> None:
 
         sem = asyncio.Semaphore(CONCURRENCY)
         lock = asyncio.Lock()
-        done = 0
+        done = failed = 0
 
         with OUTFILE.open("a", encoding="utf-8") as fh, DONEFILE.open("a", encoding="utf-8") as dfh:
             async def one(off: int) -> None:
-                nonlocal done
-                async with sem:
-                    res, _ = await seop_page(cli, "parquesMoviles", off)
-                if not res:
-                    return
+                nonlocal done, failed
+                try:
+                    async with sem:
+                        res, _ = await seop_page(cli, "parquesMoviles", off)
+                except PageFailed:
+                    async with lock:
+                        failed += 1
+                    return                      # not marked done -> next run retries it
                 async with lock:
                     for r in res:
                         fh.write(json.dumps(flatten(r), ensure_ascii=False) + "\n")
-                    dfh.write(str(off) + "\n")
+                    dfh.write(f"{off}\n")
                     done += 1
                     if done % 200 == 0:
                         fh.flush()
                         dfh.flush()
-                        print(f"[s3] {done}/{len(offsets)} pages this run", flush=True)
+                        print(f"[s3] {done}/{len(offsets)} pages this run | unresolved {failed}", flush=True)
 
             await asyncio.gather(*(one(o) for o in offsets))
 
     n = sum(1 for _ in OUTFILE.open(encoding="utf-8"))
-    print(f"[s3] DONE rows={n} (target {total}) -> {OUTFILE}", flush=True)
+    print(f"[s3] DONE rows={n} (target {total}) unresolved_pages={failed} -> {OUTFILE}", flush=True)
+    if failed:
+        print("[s3] re-run to fetch the unresolved pages", flush=True)
 
 
 if __name__ == "__main__":

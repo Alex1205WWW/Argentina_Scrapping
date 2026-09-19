@@ -21,7 +21,7 @@ import zipfile
 
 import httpx
 
-from common import HEADERS, OUT, RAW
+from common import HEADERS, OUT, RAW, download
 
 CKAN = "https://datos.gob.ar/api/3/action/package_show?id="
 DATASETS = {"inscripcion": "inscripciones-iniciales-de-autos", "baja": "bajas-de-autos"}
@@ -44,18 +44,6 @@ def resources(dataset: str) -> list[tuple[str, str]]:
         if res.get("format") == "ZIP":
             out.append((res["name"], res["url"]))
     return out
-
-
-def fetch(url: str, dest) -> None:
-    if dest.exists() and dest.stat().st_size > 0:
-        return
-    print(f"    downloading {dest.name} ...", flush=True)
-    with httpx.Client(headers=HEADERS, timeout=600.0, follow_redirects=True) as c:
-        with c.stream("GET", url) as r:
-            r.raise_for_status()
-            with dest.open("wb") as fh:
-                for chunk in r.iter_bytes(1 << 20):
-                    fh.write(chunk)
 
 
 def rows_from_zip(path):
@@ -102,7 +90,7 @@ def main() -> None:
                 continue
             dest = RAW / url.rsplit("/", 1)[-1]
             try:
-                fetch(url, dest)
+                download(url, dest)
             except Exception as e:                      # noqa: BLE001
                 print(f"    SKIP {name}: {e}", flush=True)
                 continue

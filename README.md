@@ -52,37 +52,55 @@ src/s3_parque.py       full CNRT vehicle registry       -> data/raw/parque_movil
 src/s4_arca.py         ARCA padrón (fixed-width, 6.17M) -> SQLite arca_padron
 src/s5_operadores.py   freight operating licences       -> data/raw/operadores_cargas.jsonl
 src/s6_links.py        plate <-> CUIT links             -> data/raw/links.jsonl
+src/s6b_verify.py      re-count every operator's fleet against the API; repairs short reads
 src/s7_ruta.py         RUTA constancia per plate        -> data/raw/ruta.jsonl
 src/s8_dnrpa.py        DNRPA national flows             -> SQLite dnrpa_tramites
-src/s9_build.py        load + join everything           -> data/out/freight.db
+src/s9_build.py        load + dedupe + join everything  -> data/out/freight.db
 src/s10_export.py      delivery CSVs                    -> data/out/*.csv
+src/s11_coverage.py    neighbour-sampling probe: how much of RUTA does CNRT hold?
+src/s12_findings.py    writes FINDINGS.md from the database (no hand-typed numbers)
+src/validate.py        re-queries live sources for a random sample, field by field
 ui/app.py              FastAPI read-only API
 ui/index.html          dashboard
 ```
 
 Every network stage is **resumable** — progress is recorded per key (`*.done`,
 `*.offsets`, or the JSONL key itself), so an interrupted run continues where it
-stopped instead of refetching.
+stopped instead of refetching. A request that never settles (timeout, 5xx after
+retries) is left **unrecorded** rather than stored as a negative result, so a
+network blip can never masquerade as "this plate has no RUTA" or "this carrier
+has no fleet".
+
+### Proving the data
+
+Two independent checks ship with the pipeline:
+
+- `validate.py` draws a random sample from **the database the CSVs are built
+  from**, re-queries each originating endpoint live, and compares field by field.
+- `s6b_verify.py` asks the API for every cargo operator's authoritative vehicle
+  count and compares it with what was stored; any operator that disagrees is
+  dropped and refetched.
+
+Both are run before the numbers in `FINDINGS.md` are generated.
 
 ### Run it
 
+Three commands from a clean machine (Python 3.12):
+
 ```powershell
 python -m venv .venv
-.venv\Scripts\python.exe -m pip install "httpx[http2]" pandas fastapi uvicorn beautifulsoup4 lxml
-
-cd src
-..\.venv\Scripts\python.exe s1_empresas.py
-..\.venv\Scripts\python.exe s5_operadores.py
-..\.venv\Scripts\python.exe s3_parque.py
-..\.venv\Scripts\python.exe s6_links.py
-..\.venv\Scripts\python.exe s2_flota.py
-..\.venv\Scripts\python.exe s7_ruta.py --tipo=SEMIRREMOLQUE
-..\.venv\Scripts\python.exe s7_ruta.py
-..\.venv\Scripts\python.exe s4_arca.py
-..\.venv\Scripts\python.exe s8_dnrpa.py
-..\.venv\Scripts\python.exe s9_build.py
-..\.venv\Scripts\python.exe s10_export.py
+.venv\Scripts\python.exe -m pip install -r requirements.txt
+.venv\Scripts\python.exe run_pipeline.py
 ```
+
+`run_pipeline.py` sequences the stages, stops at the first failure, and every
+stage resumes from where it left off — so if the network drops halfway through
+you re-run the same command and it continues. `--list`, `--from s7`,
+`--only s9 s10 s12` and `--with-probe` are available. A full first run takes
+roughly 3–4 hours, almost all of it the two per-plate/per-operator sweeps
+against CNRT; every later run only fetches what changed.
+
+The individual stages are plain scripts in `src/` and can be run on their own.
 
 ### Dashboard
 

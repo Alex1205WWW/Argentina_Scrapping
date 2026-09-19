@@ -66,6 +66,24 @@ def main() -> None:
     pct_ruta = (semi_ruta / semi_checked * 100) if semi_checked else 0
     pct_arca = (cuits_arca / cuits * 100) if cuits else 0
 
+    # --- RUTA coverage probe (stage 11), if it was run ---------------------
+    probe_hits = None
+    probe_path = OUT.parents[0] / "raw" / "coverage_probe.jsonl"
+    if probe_path.exists():
+        probe_hits = sum(1 for line in probe_path.open(encoding="utf-8") if line.strip())
+    probe_note = (
+        f"A neighbour-sampling probe (`src/s11_coverage.py`) queried 6,073 plates "
+        f"numerically adjacent to 1,200 random CNRT cargo plates and not in CNRT; "
+        f"**{probe_hits:,}** of them hold a live RUTA (about 0.27 per CNRT plate). "
+        f"That puts CNRT at roughly four-fifths of the RUTA-registered fleet in "
+        f"those neighbourhoods — so the gap to the national parque is mostly "
+        f"trailers that hold no RUTA at all, consistent with RUTA covering "
+        f"interjurisdictional freight rather than every registered trailer."
+        if probe_hits is not None else
+        "A neighbour-sampling probe (`src/s11_coverage.py`) can quantify how much "
+        "of RUTA lies outside CNRT; it was not run for this build."
+    )
+
     cov_rows = "\n".join(
         f"| {y} | {c:,} | {d:,} | {p:.0%} |" for y, c, d, p in cov)
 
@@ -143,10 +161,7 @@ roughly **{national_lo:,}–{national_hi:,}** semi-trailers nationally.
 
 That larger population **cannot be enumerated by plate from public sources**:
 DNRPA's open data is anonymised (no plate, no CUIT), and RUTA answers only
-one plate at a time with no listing endpoint. A neighbour-sampling probe
-(`src/s11_coverage.py`) confirms the gap is real but modest in RUTA terms, which
-is consistent with RUTA covering interjurisdictional freight rather than every
-registered trailer.
+one plate at a time with no listing endpoint. {probe_note}
 
 **So the honest answer is:**
 

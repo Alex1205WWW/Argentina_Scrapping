@@ -13,13 +13,20 @@ on its sample.
 
 | | |
 |---|---|
-| **Argentine-plated semi-trailers in the CNRT registry** | **52,141** |
-| of those checked against RUTA so far | 11,935 |
-| confirmed **RUTA vigente** | **11,446** (95.9 % of those checked) |
+| **Argentine semi-trailers with a valid plate in the CNRT registry** | **50,069** |
+| of those checked against RUTA | 50,069 |
+| confirmed **RUTA vigente** | **30,460** (60.8 % of those checked) |
+| — of which MERCOSUR-format plates (2016+) | 11,470 of 13,342 checked (86.0 %) |
+| malformed / placeholder plates excluded | 2,072 |
 | foreign MERCOSUR semi-trailers (excluded — not Argentine) | 109,351 |
 | Argentine tractor units, for reference | 49,777 |
 
-**52,141** is a complete, plate-level enumeration of every Argentine
+Plates are kept only if they match a real Argentine format — `AAA999` (pre-2016)
+or `AA999AA` (MERCOSUR). CNRT also stores 2,072 placeholder or malformed
+entries such as `*G39943`; **none** of them holds a live RUTA, which confirms they
+are dead records rather than real units, so they are excluded from the count.
+
+**50,069** is a complete, plate-level enumeration of every Argentine
 semi-trailer CNRT holds — not a sample and not an estimate. Each plate carries
 year, make, body type, axle count and chassis number, and is exported in
 `semirremolques_activos.csv`.
@@ -28,9 +35,9 @@ year, make, body type, axle count and chassis number, and is exported in
 
 | | |
 |---|---|
-| semi-trailers with a live owner link in CNRT | 24,690 |
-| distinct owner CUITs | 3,274 |
-| **owner CUITs active in the ARCA padrón** | **2,156** (65.9 %) |
+| semi-trailers with a live owner link in CNRT | 40,849 |
+| distinct owner CUITs | 3,982 |
+| **owner CUITs active in the ARCA padrón** | **2,828** (71.0 %) |
 
 "Active in ARCA" = the CUIT appears in ARCA's public bulk *Constancia de
 Inscripción* padrón (6,169,350 taxpayers). That file is
@@ -61,21 +68,18 @@ covers:
 Mean coverage **22%**. DNRPA recorded **58,565** semi-trailer
 first-registrations and only **2,691** de-registrations in 2018–2026 alone, so
 the national fleet is several times the CNRT figure — on the coverage ratio above,
-roughly **212,027–280,454** semi-trailers nationally.
+roughly **203,601–269,309** semi-trailers nationally.
 
 That larger population **cannot be enumerated by plate from public sources**:
 DNRPA's open data is anonymised (no plate, no CUIT), and RUTA answers only
-one plate at a time with no listing endpoint. A neighbour-sampling probe
-(`src/s11_coverage.py`) confirms the gap is real but modest in RUTA terms, which
-is consistent with RUTA covering interjurisdictional freight rather than every
-registered trailer.
+one plate at a time with no listing endpoint. A neighbour-sampling probe (`src/s11_coverage.py`) queried 6,073 plates numerically adjacent to 1,200 random CNRT cargo plates and not in CNRT; **325** of them hold a live RUTA (about 0.27 per CNRT plate). That puts CNRT at roughly four-fifths of the RUTA-registered fleet in those neighbourhoods — so the gap to the national parque is mostly trailers that hold no RUTA at all, consistent with RUTA covering interjurisdictional freight rather than every registered trailer.
 
 **So the honest answer is:**
 
-- **52,141** active Argentine semi-trailer plates are identifiable, with owner
+- **50,069** active Argentine semi-trailer plates are identifiable, with owner
   and full technical detail, across CNRT + RUTA — this is the usable database.
-- **2,156** ARCA-active CUITs own them.
-- Argentina's *total* semi-trailer parque is roughly 212,027–280,454,
+- **2,828** ARCA-active CUITs own them.
+- Argentina's *total* semi-trailer parque is roughly 203,601–269,309,
   but the remainder exists only as anonymised DNRPA aggregates.
 
 ---
@@ -84,16 +88,16 @@ registered trailer.
 
 | Carrier | CUIT | Semi-trailers |
 |---|---|---|
-| TRADELOG S.A.U. | 30696173008 | 78 |
-| ACONCAGUA TTES. S.R.L. | 30606343570 | 66 |
-| TTES. MESSINA S.A. | 33683190239 | 64 |
-| MYVEAN S.A. | 30708641088 | 60 |
-| TTES. J.D.G. S.A. | 33679958629 | 58 |
-| DEPOSITOS MOREIRO HNOS. S.R.L. | 30710763409 | 55 |
-| AMEYSA S.A. | 30707499997 | 55 |
-| TRANSPORTES PUERTO NUEVO S.R.L. | 30657677333 | 55 |
-| TTE. MARCILESE S.A. | 30681246742 | 53 |
-| LOGINTER S.A. | 30687280438 | 52 |
+| VICTOR MASSON TTES. CRUZ DEL SUR S.A. | 30556565798 | 453 |
+| EMPRESA DE TTES. DON PEDRO S.R.L. | 30595793404 | 435 |
+| TTES. VESPRINI S.A. | 30693761731 | 429 |
+| TTE. C.D.C. S.A. | 30594711722 | 316 |
+| TTES. MESSINA S.A. | 33683190239 | 310 |
+| TTES. EL CHOLO S.A. | 30658183636 | 302 |
+| TTES. FURLONG S.A. | 30519071521 | 293 |
+| PETROVALLE S.A.T. | 30612310900 | 259 |
+| TRANSCHEMICAL S.A. | 30702978838 | 258 |
+| TRANSOL S.R.L. | 30654254288 | 252 |
 
 ---
 
@@ -102,13 +106,13 @@ registered trailer.
 | Table | Rows | Source |
 |---|---|---|
 | `parque_movil` | 444,795 | CNRT `/v1/parquesMoviles` |
-| `links` | 314,693 | CNRT `/v1/parquesMovilesOperadores` |
-| `plate_owner` | 60,647 | resolved one owner per plate |
+| `links` | 1,104,424 | CNRT `/v1/parquesMovilesOperadores` |
+| `plate_owner` | 95,648 | resolved one owner per plate |
 | `operadores_cargas` | 24,021 | CNRT `/v1/operadores?tipoTransporte=1` |
 | `empresas` | 57,985 | CNRT `/v1/empresas` |
 | `flota_internacional` | 61,783 | CNRT consultapme by CUIT |
 | `permisos_internacionales` | 138,988 | MERCOSUR permits w/ expiry |
-| `ruta` | 14,636 | RUTA constancia per plate |
+| `ruta` | 54,842 | RUTA constancia per plate |
 | `arca_padron` | 6,169,350 | ARCA bulk padrón |
 | `dnrpa_tramites` | 330,215 | DNRPA 2018–2026 |
 

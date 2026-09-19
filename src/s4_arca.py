@@ -20,8 +20,10 @@ from __future__ import annotations
 import sqlite3
 import zipfile
 
-from common import OUT, RAW
+from common import OUT, RAW, download
 
+ARCA_URL = ("https://www.afip.gob.ar/genericos/cInscripcion/archivos/"
+            "apellidoNombreDenominacion.zip")
 ZIP = RAW / "arca_padron.zip"
 DB = OUT / "freight.db"
 
@@ -40,6 +42,7 @@ def is_active(gan: str, iva: str, mono: str, empleador: str) -> bool:
 
 
 def main() -> None:
+    download(ARCA_URL, ZIP, min_bytes=50_000_000)   # ~85 MB, refreshed by ARCA weekly
     con = sqlite3.connect(DB)
     con.executescript("""
         PRAGMA journal_mode=OFF;

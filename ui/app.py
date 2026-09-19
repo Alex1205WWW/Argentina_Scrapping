@@ -39,6 +39,21 @@ def has_rows(tbl: str) -> bool:
         return False
 
 
+# The headline aggregates scan 6M-row tables; compute them once per database
+# build (keyed on the file's mtime) instead of on every page load.
+_cache: dict[str, tuple[float, object]] = {}
+
+
+def cached(key: str, fn):
+    mtime = DB.stat().st_mtime if DB.exists() else 0.0
+    hit = _cache.get(key)
+    if hit and hit[0] == mtime:
+        return hit[1]
+    val = fn()
+    _cache[key] = (mtime, val)
+    return val
+
+
 # --------------------------------------------------------------------------
 @app.get("/")
 def index():
@@ -47,38 +62,49 @@ def index():
 
 @app.get("/api/stats")
 def stats():
-    semi_total = one("SELECT COUNT(DISTINCT dominio) FROM parque_movil "
-                     "WHERE pais='AR' AND tipo_vehiculo='SEMIRREMOLQUE'")
+    return cached("stats", _stats)
+
+
+@app.get("/api/charts")
+def charts():
+    return cached("charts", _charts)
+
+
+@app.get("/api/provenance")
+def provenance():
+    return cached("provenance", _provenance)
+
+
+def _stats():
+    # The headline set is the same one FINDINGS.md reports: Argentine semi-trailers
+    # whose plate matches a real format, one row per plate, with the resolved
+    # owner. All of it comes from v_vehiculos_carga so the UI and the report
+    # can never disagree.
+    SEMI = ("FROM v_vehiculos_carga WHERE tipo_vehiculo='SEMIRREMOLQUE' "
+            "AND pais='AR' AND dominio_valido=1")
+    semi_raw = one("SELECT COUNT(DISTINCT dominio) FROM parque_movil "
+                   "WHERE pais='AR' AND tipo_vehiculo='SEMIRREMOLQUE'")
+    semi_total = one(f"SELECT COUNT(*) {SEMI}")
     tract_total = one("SELECT COUNT(DISTINCT dominio) FROM parque_movil "
                       "WHERE pais='AR' AND tipo_vehiculo='TRACTOR'")
 
     ruta_ready = has_rows("ruta")
-    semi_ruta = one(
-        "SELECT COUNT(DISTINCT pm.dominio) FROM parque_movil pm "
-        "JOIN ruta r ON r.dominio=pm.dominio AND r.ruta_vigente IN (1,'1','True') "
-        "WHERE pm.pais='AR' AND pm.tipo_vehiculo='SEMIRREMOLQUE'") if ruta_ready else None
+    semi_ruta = one(f"SELECT COUNT(*) {SEMI} AND ruta_vigente IN (1,'1','True')") \
+        if ruta_ready else None
+    semi_ruta_checked = one(f"SELECT COUNT(*) {SEMI} AND ruta_vigente IS NOT NULL") \
+        if ruta_ready else 0
 
-    # semi-trailers whose owner link is live
-    semi_con_titular = one(
-        "SELECT COUNT(DISTINCT l.dominio) FROM links l "
-        "WHERE l.tipo_vehiculo='SEMIRREMOLQUE' AND l.activo=1 "
-        "AND l.cuit IS NOT NULL AND l.cuit<>''")
-
-    cuits_semi = one(
-        "SELECT COUNT(DISTINCT l.cuit) FROM links l "
-        "WHERE l.tipo_vehiculo='SEMIRREMOLQUE' AND l.activo=1 "
-        "AND l.cuit IS NOT NULL AND l.cuit<>''")
-
-    cuits_semi_arca = one(
-        "SELECT COUNT(DISTINCT l.cuit) FROM links l "
-        "JOIN arca_padron a ON a.cuit=l.cuit "
-        "WHERE l.tipo_vehiculo='SEMIRREMOLQUE' AND l.activo=1 "
-        "AND l.cuit IS NOT NULL AND l.cuit<>''")
+    semi_con_titular = one(f"SELECT COUNT(*) {SEMI} AND cuit IS NOT NULL AND cuit<>''")
+    cuits_semi = one(f"SELECT COUNT(DISTINCT cuit) {SEMI} AND cuit IS NOT NULL AND cuit<>''")
+    cuits_semi_arca = one(f"SELECT COUNT(DISTINCT cuit) {SEMI} AND cuit IS NOT NULL "
+                          "AND cuit<>'' AND cuit_activo_arca=1")
 
     return {
         "semirremolques_ar": semi_total,
+        "semirremolques_invalidos": semi_raw - semi_total,
         "tractores_ar": tract_total,
         "semirremolques_ruta_vigente": semi_ruta,
+        "semirremolques_ruta_consultados": semi_ruta_checked,
         "semirremolques_con_titular": semi_con_titular,
         "cuits_titulares_semi": cuits_semi,
         "cuits_titulares_semi_activos_arca": cuits_semi_arca,
@@ -98,8 +124,7 @@ def stats():
     }
 
 
-@app.get("/api/charts")
-def charts():
+def _charts():
     tipos = q("SELECT tipo_vehiculo AS label, COUNT(DISTINCT dominio) AS value "
               "FROM parque_movil WHERE pais='AR' AND tipo_vehiculo IN "
               "('SEMIRREMOLQUE','TRACTOR','CAMION','CAMIÓN','ACOPLADO','BATEA',"
@@ -138,11 +163,10 @@ def charts():
     except sqlite3.Error:
         pass
 
-    top = q("SELECT l.razon_social AS label, l.cuit, "
-            "COUNT(DISTINCT l.dominio) AS value "
-            "FROM links l WHERE l.tipo_vehiculo='SEMIRREMOLQUE' AND l.activo=1 "
-            "AND l.cuit IS NOT NULL AND l.cuit<>'' "
-            "GROUP BY l.cuit, l.razon_social ORDER BY value DESC LIMIT 15")
+    top = q("SELECT razon_social AS label, cuit, COUNT(*) AS value "
+            "FROM v_vehiculos_carga WHERE tipo_vehiculo='SEMIRREMOLQUE' "
+            "AND pais='AR' AND dominio_valido=1 AND cuit IS NOT NULL AND cuit<>'' "
+            "GROUP BY cuit ORDER BY value DESC LIMIT 15")
 
     return {"tipos": tipos, "carroceria": carroceria, "anios": anios,
             "paises": paises, "dnrpa": dnrpa, "provincias": provincias, "top_carriers": top}
@@ -154,8 +178,8 @@ def carriers(search: str = "", page: int = 1, size: int = 50,
     size = max(1, min(size, 200))
     where, params = ["o.cuit IS NOT NULL", "o.cuit<>''"], []
     if search:
-        where.append("(o.razon_social LIKE ? OR o.cuit LIKE ? OR o.email LIKE ?)")
-        params += [f"%{search}%"] * 3
+        where.append("(o.razon_social LIKE ? OR o.cuit LIKE ? OR o.email LIKE ? OR e.email LIKE ?)")
+        params += [f"%{search}%"] * 4
     if solo_activos:
         where.append("a.cuit IS NOT NULL")
     having = "HAVING semirremolques > 0" if solo_con_semi else ""
@@ -241,8 +265,7 @@ def permisos(dominio: str = Query(..., min_length=3)):
              (dominio.upper(),))
 
 
-@app.get("/api/provenance")
-def provenance():
+def _provenance():
     def n(tbl):
         try:
             return one(f"SELECT COUNT(*) FROM {tbl}")

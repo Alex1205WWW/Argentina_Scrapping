@@ -7,9 +7,8 @@ the tiposEmpresa flags that mark a company as a cargo carrier ("CA").
 from __future__ import annotations
 
 import asyncio
-import json
 
-from common import PAGE, RAW, client, seop_page
+from common import RAW, client, dig, dump_collection, read_jsonl
 
 OUTFILE = RAW / "empresas.jsonl"
 CONCURRENCY = 8
@@ -21,7 +20,7 @@ def flatten(r: dict) -> dict:
         "empresa_id": r.get("id"),
         "razon_social": r.get("razonSocial"),
         "nombre_fantasia": r.get("nombreFantasia"),
-        "tipo_documento": (r.get("tipoDocumento") or {}).get("abrev"),
+        "tipo_documento": dig(r, "tipoDocumento", "abrev"),
         "cuit": r.get("nroDocumento"),
         "es_persona_fisica": r.get("esPersonaFisica"),
         "paut": r.get("paut"),
@@ -39,34 +38,10 @@ def flatten(r: dict) -> dict:
 
 async def main() -> None:
     async with client(limit=CONCURRENCY) as cli:
-        first, total = await seop_page(cli, "empresas", 0)
-        print(f"[s1] total empresas = {total}", flush=True)
-
-        offsets = list(range(0, total, PAGE))
-        sem = asyncio.Semaphore(CONCURRENCY)
-        rows: dict[int, list] = {}
-
-        async def one(off: int) -> None:
-            async with sem:
-                res, _ = await seop_page(cli, "empresas", off)
-            rows[off] = res
-            if len(rows) % 50 == 0:
-                print(f"[s1] {len(rows)}/{len(offsets)} pages", flush=True)
-
-        await asyncio.gather(*(one(o) for o in offsets))
-
-    seen, n_cargas = set(), 0
-    with OUTFILE.open("w", encoding="utf-8") as fh:
-        for off in sorted(rows):
-            for r in rows[off]:
-                if r.get("id") in seen:
-                    continue
-                seen.add(r.get("id"))
-                flat = flatten(r)
-                n_cargas += bool(flat["es_cargas"])
-                fh.write(json.dumps(flat, ensure_ascii=False) + "\n")
-
-    print(f"[s1] DONE empresas={len(seen)} (expected {total}) cargas={n_cargas} -> {OUTFILE}", flush=True)
+        await dump_collection(cli, "empresas", flatten, OUTFILE,
+                              concurrency=CONCURRENCY, label="s1")
+    cargas = sum(1 for r in read_jsonl(OUTFILE) if r.get("es_cargas"))
+    print(f"[s1] cargo-flagged companies: {cargas}", flush=True)
 
 
 if __name__ == "__main__":
