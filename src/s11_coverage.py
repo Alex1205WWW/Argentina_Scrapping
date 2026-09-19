@@ -30,7 +30,7 @@ from common import CNRT_API, RAW, UNRESOLVED, client, get_json
 
 IN_PARQUE = RAW / "parque_movil.jsonl"
 OUTFILE = RAW / "coverage_probe.jsonl"
-CONCURRENCY = 20
+CONCURRENCY = 12
 
 OLD = re.compile(r"^([A-Z]{3})(\d{3})$")        # AAA123, issued to 2016
 NEW = re.compile(r"^([A-Z]{2})(\d{3})([A-Z]{2})$")  # AB123CD, MERCOSUR
