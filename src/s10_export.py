@@ -113,7 +113,8 @@ def main() -> None:
                     WHEN ruta_vigente IS NULL THEN '' ELSE 'NO' END,
                ruta_constancia, ruta_certificado, ruta_fecha_alta,
                CASE WHEN cuit_activo_arca=1 THEN 'SI' ELSE 'NO' END,
-               arca_denominacion
+               arca_denominacion,
+               CASE WHEN dominio_valido=1 THEN 'SI' ELSE 'NO' END
         FROM v_vehiculos_carga
         ORDER BY tipo_vehiculo, dominio
     """, [
@@ -122,7 +123,7 @@ def main() -> None:
         "cuit_titular", "razon_social_titular", "email", "paut", "jurisdiccion",
         "alta_en_operador", "baja_en_operador",
         "ruta_vigente", "ruta_nro_constancia", "ruta_nro_certificado", "ruta_fecha_alta",
-        "cuit_activo_arca", "denominacion_arca",
+        "cuit_activo_arca", "denominacion_arca", "dominio_formato_valido",
     ])
 
     # ---------------- the selection-question answer set -------------------
@@ -135,6 +136,7 @@ def main() -> None:
                v.ruta_constancia
         FROM v_vehiculos_carga v
         WHERE v.tipo_vehiculo = 'SEMIRREMOLQUE' AND v.pais = 'AR'
+          AND v.dominio_valido = 1
         ORDER BY v.dominio
     """, [
         "dominio", "anio_modelo", "marca", "tipo_semirremolque", "cantidad_ejes",
