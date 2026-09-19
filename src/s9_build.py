@@ -216,7 +216,13 @@ def main() -> None:
             r.fecha_alta            AS ruta_fecha_alta,
             CASE WHEN a.cuit IS NOT NULL THEN 1 ELSE 0 END AS cuit_activo_arca,
             a.denominacion          AS arca_denominacion,
-            a.imp_iva, a.imp_ganancias, a.empleador
+            a.imp_iva, a.imp_ganancias, a.empleador,
+            -- a real Argentine plate is either the pre-2016 AAA999 form or the
+            -- MERCOSUR AA999AA form; CNRT also stores placeholders ("*G39943")
+            -- and malformed legacy strings, none of which hold a live RUTA
+            CASE WHEN pm.dominio GLOB '[A-Z][A-Z][A-Z][0-9][0-9][0-9]'
+                   OR pm.dominio GLOB '[A-Z][A-Z][0-9][0-9][0-9][A-Z][A-Z]'
+                 THEN 1 ELSE 0 END AS dominio_valido
         FROM (
             -- a handful of plates appear twice (re-registration); keep the newest
             SELECT * FROM parque_movil
@@ -236,6 +242,8 @@ def main() -> None:
         ("  AR plates", "SELECT COUNT(DISTINCT dominio) FROM parque_movil WHERE pais='AR'"),
         ("  AR SEMIRREMOLQUE",
          "SELECT COUNT(DISTINCT dominio) FROM parque_movil WHERE pais='AR' AND tipo_vehiculo='SEMIRREMOLQUE'"),
+        ("  ...dominio valido",
+         "SELECT COUNT(*) FROM v_vehiculos_carga WHERE tipo_vehiculo='SEMIRREMOLQUE' AND dominio_valido=1"),
         ("  AR TRACTOR",
          "SELECT COUNT(DISTINCT dominio) FROM parque_movil WHERE pais='AR' AND tipo_vehiculo='TRACTOR'"),
         ("links rows", "SELECT COUNT(*) FROM links"),
