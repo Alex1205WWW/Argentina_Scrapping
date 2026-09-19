@@ -1,0 +1,108 @@
+# =========================================
+
+# pytohn 
+
+# =========================================
+
+
+# Byte-compiled / cache files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Python virtual environment
+.venv/
+venv/
+env/
+ENV/
+
+# =========================================
+
+# Environment Variables / Secrets
+
+# =========================================
+
+.env
+.emv.*
+!.env.example
+
+# =========================
+# Package management
+# =========================
+
+# Build files
+build/
+dist/
+*.egg-info/
+
+# =========================
+# IDE / Editor files
+# =========================
+
+# VS Code
+.vscode/
+
+# PyCharm
+.idea/
+
+# Jupyter Notebook checkpoints
+.ipynb_checkpoints/
+
+# =========================
+# Logs
+# =========================
+
+*.log
+logs/
+
+# =========================
+# Web scraping generated files
+# =========================
+
+# Scraped data
+data/
+output/
+outputs/
+results/
+
+# Raw HTML pages
+*.html
+
+# Exported files
+*.csv
+*.json
+*.xlsx
+
+# Screenshots from scraping/debugging
+screenshots/
+*.png
+*.jpg
+*.jpeg
+
+# =========================
+# Database files
+# =========================
+
+*.sqlite
+*.sqlite3
+*.db
+
+# =========================
+# OS generated files
+# =========================
+
+# macOS
+.DS_Store
+
+# Windows
+Thumbs.db
+desktop.ini
+
+# =========================
+# Temporary files
+# =========================
+
+tmp/
+temp/
+*.tmp
+*.bak
