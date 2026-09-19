@@ -19,31 +19,30 @@ def main() -> None:
     o = lambda s, p=(): con.execute(s, p).fetchone()[0]  # noqa: E731
 
     # --- plates -----------------------------------------------------------
-    semi_ar = o("SELECT COUNT(DISTINCT dominio) FROM parque_movil "
-                "WHERE pais='AR' AND tipo_vehiculo='SEMIRREMOLQUE'")
-    semi_checked = o("SELECT COUNT(*) FROM ruta r JOIN parque_movil pm "
-                     "ON pm.dominio=r.dominio AND pm.pais='AR' "
-                     "AND pm.tipo_vehiculo='SEMIRREMOLQUE'")
-    semi_ruta = o("SELECT COUNT(*) FROM ruta r JOIN parque_movil pm "
-                  "ON pm.dominio=r.dominio AND pm.pais='AR' "
-                  "AND pm.tipo_vehiculo='SEMIRREMOLQUE' "
-                  "WHERE r.ruta_vigente IN (1,'1','True')")
+    SEMI = ("FROM v_vehiculos_carga WHERE tipo_vehiculo='SEMIRREMOLQUE' "
+            "AND pais='AR' AND dominio_valido=1")
+    semi_raw = o("SELECT COUNT(DISTINCT dominio) FROM parque_movil "
+                 "WHERE pais='AR' AND tipo_vehiculo='SEMIRREMOLQUE'")
+    semi_ar = o(f"SELECT COUNT(*) {SEMI}")
+    semi_invalid = semi_raw - semi_ar
+    semi_checked = o(f"SELECT COUNT(*) {SEMI} AND ruta_vigente IS NOT NULL")
+    semi_ruta = o(f"SELECT COUNT(*) {SEMI} AND ruta_vigente IN (1,'1','True')")
+    semi_merco = o(f"SELECT COUNT(*) {SEMI} AND dominio GLOB "
+                   "'[A-Z][A-Z][0-9][0-9][0-9][A-Z][A-Z]'")
+    merco_checked = o(f"SELECT COUNT(*) {SEMI} AND ruta_vigente IS NOT NULL "
+                      "AND dominio GLOB '[A-Z][A-Z][0-9][0-9][0-9][A-Z][A-Z]'")
+    merco_ruta = o(f"SELECT COUNT(*) {SEMI} AND ruta_vigente IN (1,'1','True') "
+                   "AND dominio GLOB '[A-Z][A-Z][0-9][0-9][0-9][A-Z][A-Z]'")
     semi_foreign = o("SELECT COUNT(DISTINCT dominio) FROM parque_movil "
                      "WHERE pais<>'AR' AND tipo_vehiculo='SEMIRREMOLQUE'")
     tractor_ar = o("SELECT COUNT(DISTINCT dominio) FROM parque_movil "
                    "WHERE pais='AR' AND tipo_vehiculo='TRACTOR'")
 
     # --- owners -----------------------------------------------------------
-    semi_owned = o("SELECT COUNT(*) FROM plate_owner po JOIN parque_movil pm "
-                   "ON pm.dominio=po.dominio AND pm.pais='AR' "
-                   "AND pm.tipo_vehiculo='SEMIRREMOLQUE'")
-    cuits = o("SELECT COUNT(DISTINCT po.cuit) FROM plate_owner po JOIN parque_movil pm "
-              "ON pm.dominio=po.dominio AND pm.pais='AR' "
-              "AND pm.tipo_vehiculo='SEMIRREMOLQUE'")
-    cuits_arca = o("SELECT COUNT(DISTINCT po.cuit) FROM plate_owner po "
-                   "JOIN parque_movil pm ON pm.dominio=po.dominio AND pm.pais='AR' "
-                   "AND pm.tipo_vehiculo='SEMIRREMOLQUE' "
-                   "JOIN arca_padron a ON a.cuit=po.cuit")
+    semi_owned = o(f"SELECT COUNT(*) {SEMI} AND cuit IS NOT NULL AND cuit<>''")
+    cuits = o(f"SELECT COUNT(DISTINCT cuit) {SEMI} AND cuit IS NOT NULL AND cuit<>''")
+    cuits_arca = o(f"SELECT COUNT(DISTINCT cuit) {SEMI} AND cuit IS NOT NULL "
+                   "AND cuit<>'' AND cuit_activo_arca=1")
 
     # --- national context from DNRPA --------------------------------------
     dn_alt = o("SELECT COALESCE(SUM(cantidad),0) FROM dnrpa_tramites "
@@ -70,12 +69,10 @@ def main() -> None:
     cov_rows = "\n".join(
         f"| {y} | {c:,} | {d:,} | {p:.0%} |" for y, c, d, p in cov)
 
-    top = con.execute("""
-        SELECT po.razon_social, po.cuit, COUNT(*) n
-        FROM plate_owner po JOIN parque_movil pm
-          ON pm.dominio=po.dominio AND pm.pais='AR'
-         AND pm.tipo_vehiculo='SEMIRREMOLQUE'
-        GROUP BY po.cuit ORDER BY n DESC LIMIT 10""").fetchall()
+    top = con.execute(f"""
+        SELECT razon_social, cuit, COUNT(*) n
+        {SEMI} AND cuit IS NOT NULL AND cuit<>''
+        GROUP BY cuit ORDER BY n DESC LIMIT 10""").fetchall()
     top_rows = "\n".join(f"| {r[0]} | {r[1]} | {r[2]:,} |" for r in top)
 
     md = f"""# Findings — active semi-trailers and their carriers in Argentina
@@ -93,11 +90,18 @@ on its sample.
 
 | | |
 |---|---|
-| **Argentine-plated semi-trailers in the CNRT registry** | **{semi_ar:,}** |
-| of those checked against RUTA so far | {semi_checked:,} |
+| **Argentine semi-trailers with a valid plate in the CNRT registry** | **{semi_ar:,}** |
+| of those checked against RUTA | {semi_checked:,} |
 | confirmed **RUTA vigente** | **{semi_ruta:,}** ({pct_ruta:.1f} % of those checked) |
+| — of which MERCOSUR-format plates (2016+) | {merco_ruta:,} of {merco_checked:,} checked ({(100*merco_ruta/merco_checked if merco_checked else 0):.1f} %) |
+| malformed / placeholder plates excluded | {semi_invalid:,} |
 | foreign MERCOSUR semi-trailers (excluded — not Argentine) | {semi_foreign:,} |
 | Argentine tractor units, for reference | {tractor_ar:,} |
+
+Plates are kept only if they match a real Argentine format — `AAA999` (pre-2016)
+or `AA999AA` (MERCOSUR). CNRT also stores {semi_invalid:,} placeholder or malformed
+entries such as `*G39943`; **none** of them holds a live RUTA, which confirms they
+are dead records rather than real units, so they are excluded from the count.
 
 **{semi_ar:,}** is a complete, plate-level enumeration of every Argentine
 semi-trailer CNRT holds — not a sample and not an estimate. Each plate carries
