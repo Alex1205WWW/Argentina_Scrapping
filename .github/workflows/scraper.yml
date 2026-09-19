@@ -1,28 +1,88 @@
-name: Python Scraper
+# Scrape the Argentine freight registries, rebuild the database and publish the
+# static dashboard to the `site` branch, which Netlify deploys.
+#
+#   schedule          weekly - the registries change slowly and a full run is a
+#                     ~3.5 h, ~10 req/s sweep of public government APIs
+#   workflow_dispatch manual run; give `stages` to run a subset, e.g. "s1 s5"
+#                     as a 2-minute connectivity smoke test before a full run
+#
+# No secrets are needed: publishing uses the workflow's own GITHUB_TOKEN and
+# Netlify pulls the `site` branch itself.
+name: Scrape & publish
 
 on:
   schedule:
-    - cron: "0 8 * * *"
-
+    - cron: "0 3 * * 0"        # Sundays 03:00 UTC = 00:00 Buenos Aires
   workflow_dispatch:
+    inputs:
+      stages:
+        description: "Stages to run (blank = full pipeline). Smoke test: s1 s5"
+        required: false
+        default: ""
+
+concurrency:
+  group: scrape
+  cancel-in-progress: false    # never kill a 3-hour run because another was queued
+
+permissions:
+  contents: write              # to push the `site` branch
 
 jobs:
   scrape:
     runs-on: ubuntu-latest
+    timeout-minutes: 350       # full run ~3.5 h; GitHub's hard ceiling is 6 h
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Python
+      - name: Set up Python 3.12
         uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
+          python-version: "3.12"
+          cache: pip
 
-      - name: Install packages
-        run: |
-          pip install -r requirements.txt
+      - name: Restore large source downloads (DNRPA yearly zips)
+        # --fresh re-downloads ARCA's weekly padron and the current-year DNRPA
+        # zips anyway; closed years never change, so caching them saves ~400 MB
+        uses: actions/cache@v4
+        with:
+          path: data/raw/*.zip
+          key: source-zips-${{ github.run_id }}
+          restore-keys: source-zips-
 
-      - name: Run scraper
+      - name: Install
+        run: pip install -r requirements.txt
+
+      - name: Run pipeline
+        env:
+          STAGES: ${{ inputs.stages }}
         run: |
-          python main.py
+          if [ -n "$STAGES" ]; then
+            echo "subset run: $STAGES"
+            python -u run_pipeline.py --only $STAGES
+          else
+            python -u run_pipeline.py --fresh
+          fi
+
+      - name: Keep the built site as a downloadable artifact (7 days)
+        if: ${{ inputs.stages == '' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: site
+          path: site
+          retention-days: 7
+
+      - name: Publish site/ to the `site` branch
+        # force_orphan keeps that branch at exactly one commit, so the repo does
+        # not grow by ~30 MB every week. Netlify redeploys on each push to it.
+        if: ${{ inputs.stages == '' }}
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_branch: site
+          publish_dir: ./site
+          force_orphan: true
+          user_name: github-actions[bot]
+          user_email: 41898282+github-actions[bot]@users.noreply.github.com
+          commit_message: "data: scrape run ${{ github.run_id }}"

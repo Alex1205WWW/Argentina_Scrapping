@@ -27,6 +27,8 @@ def main() -> None:
     semi_invalid = semi_raw - semi_ar
     semi_checked = o(f"SELECT COUNT(*) {SEMI} AND ruta_vigente IS NOT NULL")
     semi_ruta = o(f"SELECT COUNT(*) {SEMI} AND ruta_vigente IN (1,'1','True')")
+    invalid_ruta = o("SELECT COUNT(*) FROM v_vehiculos_carga WHERE tipo_vehiculo='SEMIRREMOLQUE' "
+                     "AND pais='AR' AND dominio_valido=0 AND ruta_vigente IN (1,'1','True')")
     semi_merco = o(f"SELECT COUNT(*) {SEMI} AND dominio GLOB "
                    "'[A-Z][A-Z][0-9][0-9][0-9][A-Z][A-Z]'")
     merco_checked = o(f"SELECT COUNT(*) {SEMI} AND ruta_vigente IS NOT NULL "
@@ -118,8 +120,9 @@ on its sample.
 
 Plates are kept only if they match a real Argentine format — `AAA999` (pre-2016)
 or `AA999AA` (MERCOSUR). CNRT also stores {semi_invalid:,} placeholder or malformed
-entries such as `*G39943`; **none** of them holds a live RUTA, which confirms they
-are dead records rather than real units, so they are excluded from the count.
+entries such as `*G39943`; only **{invalid_ruta}** of them hold a live RUTA
+(against {semi_ruta:,} of the well-formed plates), which confirms they are dead or
+mistyped records rather than real units, so they are excluded from the count.
 
 **{semi_ar:,}** is a complete, plate-level enumeration of every Argentine
 semi-trailer CNRT holds — not a sample and not an estimate. Each plate carries

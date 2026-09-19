@@ -175,6 +175,13 @@ def _charts():
 @app.get("/api/carriers")
 def carriers(search: str = "", page: int = 1, size: int = 50,
              solo_activos: bool = False, solo_con_semi: bool = False):
+    return _carriers(search, page, size, solo_activos, solo_con_semi)
+
+
+def _carriers(search: str = "", page: int = 1, size: int = 50,
+              solo_activos: bool = False, solo_con_semi: bool = False,
+              all_rows: bool = False):
+    """all_rows=True skips pagination - used by the static-site builder (s13)."""
     size = max(1, min(size, 200))
     where, params = ["o.cuit IS NOT NULL", "o.cuit<>''"], []
     if search:
@@ -207,9 +214,11 @@ def carriers(search: str = "", page: int = 1, size: int = 50,
                COUNT(DISTINCT l.dominio) AS vehiculos
         {base}
         ORDER BY semirremolques DESC, razon_social
-        LIMIT ? OFFSET ?
-    """, tuple(params) + (size, (page - 1) * size))
+        {"" if all_rows else "LIMIT ? OFFSET ?"}
+    """, tuple(params) + (() if all_rows else (size, (page - 1) * size)))
 
+    if all_rows:
+        return {"rows": rows, "total": len(rows), "page": 1, "size": len(rows)}
     total = one(f"SELECT COUNT(*) FROM (SELECT o.cuit, "
                 f"COUNT(DISTINCT CASE WHEN l.tipo_vehiculo='SEMIRREMOLQUE' THEN l.dominio END) AS semirremolques "
                 f"{base})", tuple(params))
@@ -219,6 +228,12 @@ def carriers(search: str = "", page: int = 1, size: int = 50,
 @app.get("/api/vehicles")
 def vehicles(search: str = "", tipo: str = "", page: int = 1, size: int = 50,
              solo_ruta: bool = False):
+    return _vehicles(search, tipo, page, size, solo_ruta)
+
+
+def _vehicles(search: str = "", tipo: str = "", page: int = 1, size: int = 50,
+              solo_ruta: bool = False, all_rows: bool = False):
+    """all_rows=True skips pagination - used by the static-site builder (s13)."""
     size = max(1, min(size, 200))
     where, params = ["pm.pais='AR'"], []
     if tipo:
@@ -252,8 +267,10 @@ def vehicles(search: str = "", tipo: str = "", page: int = 1, size: int = 50,
                CASE WHEN a.cuit IS NOT NULL THEN 1 ELSE 0 END AS activo_arca
         {base}
         GROUP BY pm.dominio
-        ORDER BY pm.dominio LIMIT ? OFFSET ?
-    """, tuple(params) + (size, (page - 1) * size))
+        ORDER BY pm.dominio {"" if all_rows else "LIMIT ? OFFSET ?"}
+    """, tuple(params) + (() if all_rows else (size, (page - 1) * size)))
+    if all_rows:
+        return {"rows": rows, "total": len(rows), "page": 1, "size": len(rows)}
     total = one(f"SELECT COUNT(DISTINCT pm.dominio) {base}", tuple(params))
     return {"rows": rows, "total": total, "page": page, "size": size}
 

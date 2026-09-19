@@ -109,6 +109,13 @@ The individual stages are plain scripts in `src/` and can be run on their own.
 # http://127.0.0.1:8000
 ```
 
+### Deployment (GitHub Actions → Netlify)
+
+`.github/workflows/scraper.yml` re-scrapes weekly, then `src/s13_site.py` renders
+the same dashboard as a static site (`site/`) which is force-pushed to the
+**`site`** branch; Netlify deploys that branch. Step-by-step setup, the smoke
+test to run first, and troubleshooting are in **[`DEPLOY.md`](DEPLOY.md)**.
+
 Shows the two headline figures, fleet composition, semi-trailer body types and
 model years, DNRPA national flows, the largest fleet owners, and searchable
 carrier / vehicle tables with CSV download. Sources tab lists every table with

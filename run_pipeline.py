@@ -1,6 +1,8 @@
 """One command for the whole pipeline.
 
     python run_pipeline.py                 everything, in order (each stage resumes)
+    python run_pipeline.py --fresh         re-scrape the live registries from zero
+                                           (what the scheduled GitHub Action runs)
     python run_pipeline.py --from s7       start at a stage and run to the end
     python run_pipeline.py --only s9 s10   run just these stages
     python run_pipeline.py --with-probe    also run the optional RUTA coverage probe
@@ -8,9 +10,16 @@
 
 Every stage is a standalone script in src/; this only sequences them and stops
 at the first failure so a broken step can never be papered over by a later one.
+
+Resume vs. fresh: stages resume by design, which is what you want after an
+interruption - but a *refresh* must see records that changed (a trailer sold, a
+RUTA expired), so --fresh deletes the CNRT/RUTA dumps and the source files that
+their publishers update (ARCA's weekly padron, DNRPA's current-year zips) and
+keeps the DNRPA zips for closed years, which never change.
 """
 from __future__ import annotations
 
+import datetime as dt
 import subprocess
 import sys
 import time
@@ -18,6 +27,24 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
 SRC = ROOT / "src"
+RAW = ROOT / "data" / "raw"
+
+FRESH_DELETE = [
+    "empresas.jsonl", "operadores_cargas.jsonl", "parque_movil.jsonl", "parque_movil.offsets",
+    "links.jsonl", "links.done", "links.verify", "flota.jsonl", "ruta.jsonl",
+    "coverage_probe.jsonl", "arca_padron.zip",
+]
+
+
+def fresh() -> None:
+    year = dt.date.today().year
+    victims = [RAW / n for n in FRESH_DELETE] + list(RAW.glob(f"dnrpa-*-{year}.zip"))
+    gone = 0
+    for p in victims:
+        if p.exists():
+            p.unlink()
+            gone += 1
+    print(f"[fresh] removed {gone} files from data/raw (closed-year DNRPA zips kept)")
 
 # (id, argv, what it does)
 STAGES = [
@@ -35,6 +62,7 @@ STAGES = [
     ("s10", ["s10_export.py"],                     "delivery CSVs"),
     ("s12", ["s12_findings.py"],                   "FINDINGS.md"),
     ("val", ["validate.py", "25"],                 "re-verify a sample against the live sources"),
+    ("site", ["s13_site.py"],                      "static site for Netlify -> site/"),
 ]
 OPTIONAL = [
     ("s11", ["s11_coverage.py", "1200", "3"],      "RUTA coverage probe (neighbour sampling)"),
@@ -48,6 +76,8 @@ def main(argv: list[str]) -> int:
         return 0
 
     stages = list(STAGES)
+    if "--fresh" in argv:
+        fresh()
     if "--with-probe" in argv:
         i = next(k for k, s in enumerate(stages) if s[0] == "s10")
         stages[i + 1:i + 1] = OPTIONAL
@@ -76,6 +106,7 @@ def main(argv: list[str]) -> int:
     print(f"  database : {ROOT / 'data' / 'out' / 'freight.db'}")
     print(f"  csv      : {ROOT / 'data' / 'out'}")
     print(f"  findings : {ROOT / 'FINDINGS.md'}")
+    print(f"  site     : {ROOT / 'site'}  (preview: python -m http.server -d site 8080)")
     print(f"  dashboard: .venv\\Scripts\\python.exe -m uvicorn app:app --app-dir ui --port 8000")
     return 0
 

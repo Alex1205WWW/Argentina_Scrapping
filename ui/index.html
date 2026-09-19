@@ -110,7 +110,10 @@ footer{margin-top:34px;color:var(--muted);font-size:12px;line-height:1.7}
     <h1>Base de Datos de Transporte de Cargas &mdash; Argentina</h1>
     <p class="sub">CNRT &middot; RUTA &middot; DNRPA &middot; ARCA &mdash; <span id="asof" class="muted"></span></p>
   </div>
-  <button class="btn" id="theme">Tema</button>
+  <div style="display:flex;gap:8px">
+    <a class="btn" id="lnk-findings" href="findings.html" style="text-decoration:none" hidden>Informe</a>
+    <button class="btn" id="theme">Tema</button>
+  </div>
 </header>
 
 <!-- the two selection-question answers -->
@@ -188,7 +191,7 @@ footer{margin-top:34px;color:var(--muted);font-size:12px;line-height:1.7}
     <input type="search" id="q-car" placeholder="Buscar razon social, CUIT o email...">
     <label class="chk"><input type="checkbox" id="f-arca"> Solo CUIT activo en ARCA</label>
     <label class="chk"><input type="checkbox" id="f-semi"> Solo con semirremolques</label>
-    <a class="btn" href="/api/export/carriers.csv" style="text-decoration:none">Descargar CSV</a>
+    <a class="btn" href="#" data-export="carriers.csv" style="text-decoration:none">Descargar CSV</a>
   </div>
   <div class="tblwrap"><table id="t-car"><thead></thead><tbody></tbody></table></div>
   <div class="pager" id="pg-car"></div>
@@ -205,7 +208,7 @@ footer{margin-top:34px;color:var(--muted);font-size:12px;line-height:1.7}
       <option value="BATEA">Batea</option>
     </select>
     <label class="chk"><input type="checkbox" id="f-ruta"> Solo RUTA vigente</label>
-    <a class="btn" href="/api/export/fleet.csv" style="text-decoration:none">Descargar CSV</a>
+    <a class="btn" href="#" data-export="fleet.csv" style="text-decoration:none">Descargar CSV</a>
   </div>
   <div class="tblwrap"><table id="t-veh"><thead></thead><tbody></tbody></table></div>
   <div class="pager" id="pg-veh"></div>
@@ -225,6 +228,64 @@ footer{margin-top:34px;color:var(--muted);font-size:12px;line-height:1.7}
   if (t === 'light' || t === 'dark') document.documentElement.setAttribute('data-theme', t); }
 const $ = s => document.querySelector(s);
 const fmt = n => (n === null || n === undefined) ? '—' : n.toLocaleString('es-AR');
+
+/* ---------- data source ----------------------------------------------------
+   The same page runs in two modes:
+     live   - local FastAPI (ui/app.py) answers /api/* against freight.db
+     static - Netlify: s13_site.py pre-rendered data/*.json; search, filters
+              and pagination happen here in the browser
+   s13 switches the mode by injecting <meta name="data-mode" content="static">. */
+const STATIC = document.querySelector('meta[name="data-mode"]')?.content === 'static';
+
+function liveApi(){
+  const get = (path, params) =>
+    fetch(path + (params ? '?' + new URLSearchParams(params) : '')).then(r => r.json());
+  return {
+    stats: () => get('/api/stats'), charts: () => get('/api/charts'),
+    provenance: () => get('/api/provenance'),
+    carriers: p => get('/api/carriers', p), vehicles: p => get('/api/vehicles', p),
+    exportUrl: name => '/api/export/' + name,
+  };
+}
+
+function staticApi(){
+  const json = path => fetch(path).then(r => r.json());
+  const cache = {};
+  const table = name => {                       // array-of-arrays -> objects, loaded once
+    if (!cache[name]) cache[name] = json(`data/${name}.json`).then(t =>
+      t.rows.map(r => Object.fromEntries(t.columns.map((c, i) => [c, r[i]]))));
+    return cache[name];
+  };
+  const like = (v, q) => v != null && String(v).toLowerCase().includes(q);
+  const on = v => v === true || v === 'true';
+  const page = (rows, p) => {
+    const size = +p.size || 50, pg = Math.max(1, +p.page || 1);
+    return {rows: rows.slice((pg - 1) * size, pg * size), total: rows.length, page: pg, size};
+  };
+  return {
+    stats: () => json('data/stats.json'), charts: () => json('data/charts.json'),
+    provenance: () => json('data/provenance.json'),
+    carriers: async p => {                      // rows arrive pre-sorted by the builder
+      const q = (p.search || '').toLowerCase();
+      let rows = await table('carriers');
+      if (q) rows = rows.filter(r => like(r.razon_social, q) || like(r.cuit, q) || like(r.email, q));
+      if (on(p.solo_activos))  rows = rows.filter(r => r.activo_arca == 1);
+      if (on(p.solo_con_semi)) rows = rows.filter(r => r.semirremolques > 0);
+      return page(rows, p);
+    },
+    vehicles: async p => {
+      const q = (p.search || '').toLowerCase();
+      let rows = await table('vehicles');
+      if (p.tipo) rows = rows.filter(r => r.tipo_vehiculo === p.tipo);
+      if (q) rows = rows.filter(r => like(r.dominio, q) || like(r.cuit, q) || like(r.razon_social, q));
+      if (on(p.solo_ruta)) rows = rows.filter(r => r.ruta == 1);
+      return page(rows, p);
+    },
+    exportUrl: name => 'downloads/' + name,
+  };
+}
+
+const api = STATIC ? staticApi() : liveApi();
 const tip = $('#tip');
 function showTip(e, html){ tip.innerHTML = html; tip.style.opacity = 1;
   tip.style.left = Math.min(e.clientX + 14, innerWidth - tip.offsetWidth - 10) + 'px';
@@ -309,9 +370,7 @@ function cols(el, cats, series, opts={}){
 /* ---------- data load ---------- */
 let STATS = null, CHARTS = null;
 async function load(){
-  [STATS, CHARTS] = await Promise.all([
-    fetch('/api/stats').then(r => r.json()),
-    fetch('/api/charts').then(r => r.json())]);
+  [STATS, CHARTS] = await Promise.all([api.stats(), api.charts()]);
   render();
 }
 
@@ -355,7 +414,8 @@ function render(){
     {name:'Inscripciones', color:'var(--s1)', values:pick('inscripcion')},
     {name:'Bajas',         color:'var(--s2)', values:pick('baja')}], {h:220});
 
-  $('#asof').textContent = 'Datos extraidos ' + new Date().toLocaleDateString('es-AR');
+  $('#asof').textContent = 'Datos extraidos ' +
+    (s.generated_at ? new Date(s.generated_at) : new Date()).toLocaleDateString('es-AR');
   $('#foot').innerHTML =
     'Fuentes: CNRT (api.cnrt.gob.ar/seop/public, consultapme.cnrt.gob.ar), '
   + 'RUTA via CNRT, DNRPA via datos.gob.ar, padron ARCA (afip.gob.ar). '
@@ -367,9 +427,8 @@ const flag = v => v ? '<span class="pill ok">SI</span>' : '<span class="pill no"
 const state = {car:{page:1}, veh:{page:1}};
 
 async function loadCarriers(){
-  const p = new URLSearchParams({search:$('#q-car').value, page:state.car.page, size:50,
+  const d = await api.carriers({search:$('#q-car').value, page:state.car.page, size:50,
     solo_activos:$('#f-arca').checked, solo_con_semi:$('#f-semi').checked});
-  const d = await (await fetch('/api/carriers?'+p)).json();
   $('#t-car thead').innerHTML = '<tr>'+['CUIT','Razon social','Email','PAUT','ARCA',
     'Semirr.','Tractores','Flota'].map(h=>`<th>${h}</th>`).join('')+'</tr>';
   $('#t-car tbody').innerHTML = d.rows.map(r => `<tr>
@@ -384,9 +443,8 @@ async function loadCarriers(){
 }
 
 async function loadVehicles(){
-  const p = new URLSearchParams({search:$('#q-veh').value, tipo:$('#f-tipo').value,
+  const d = await api.vehicles({search:$('#q-veh').value, tipo:$('#f-tipo').value,
     page:state.veh.page, size:50, solo_ruta:$('#f-ruta').checked});
-  const d = await (await fetch('/api/vehicles?'+p)).json();
   $('#t-veh thead').innerHTML = '<tr>'+['Dominio','Tipo','Anio','Marca','Carroceria','Ejes',
     'CUIT titular','Razon social','RUTA','ARCA'].map(h=>`<th>${h}</th>`).join('')+'</tr>';
   $('#t-veh tbody').innerHTML = d.rows.map(r => `<tr>
@@ -402,7 +460,7 @@ async function loadVehicles(){
 }
 
 async function loadSources(){
-  const d = await (await fetch('/api/provenance')).json();
+  const d = await api.provenance();
   $('#t-src thead').innerHTML = '<tr>'+['Fuente','Recurso','Tabla','Filas','Aporta']
     .map(h=>`<th>${h}</th>`).join('')+'</tr>';
   $('#t-src tbody').innerHTML = d.map(r => `<tr><td><b>${r.fuente}</b></td>
@@ -445,6 +503,9 @@ $('#theme').onclick = () => {
   render();
 };
 addEventListener('resize', debounce(render));
+
+document.querySelectorAll('a[data-export]').forEach(a => a.href = api.exportUrl(a.dataset.export));
+$('#lnk-findings').hidden = !STATIC;
 
 load(); loadCarriers();
 </script>
