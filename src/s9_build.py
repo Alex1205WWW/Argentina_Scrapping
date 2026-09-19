@@ -91,13 +91,25 @@ def main() -> None:
     con.execute("CREATE INDEX IF NOT EXISTS ix_pm_tipo ON parque_movil(tipo_vehiculo, pais)")
 
     # ---- plate <-> carrier links -----------------------------------------
+    # link_id is unique per assignment; the dump can hold repeats because stage 6
+    # appends and a resumed run may re-emit rows whose done-marker was not yet
+    # flushed. Deduplicate here so downstream counts are not inflated.
     cols = ["link_id", "operador_id", "parque_movil_id", "dominio", "anio_modelo",
             "nro_chasis", "tipo_vehiculo", "cantidad_ejes", "marca", "modelo",
             "tipo_carroceria", "peso_maximo", "carga_util", "pais", "cuit", "razon_social",
             "email", "paut", "jurisdiccion", "interno", "fecha_alta", "fecha_baja",
             "baja_genuina", "vigente", "activo"]
-    table(con, "links", cols,
-          ([norm(r.get(c)) for c in cols] for r in load_jsonl(RAW / "links.jsonl")))
+
+    def dedup_links():
+        seen = set()
+        for r in load_jsonl(RAW / "links.jsonl"):
+            lid = r.get("link_id")
+            if lid in seen:
+                continue
+            seen.add(lid)
+            yield [norm(r.get(c)) for c in cols]
+
+    table(con, "links", cols, dedup_links())
     con.execute("CREATE INDEX IF NOT EXISTS ix_lk_dom ON links(dominio)")
     con.execute("CREATE INDEX IF NOT EXISTS ix_lk_cuit ON links(cuit)")
     con.execute("CREATE INDEX IF NOT EXISTS ix_lk_tipo ON links(tipo_vehiculo, activo)")
@@ -137,6 +149,40 @@ def main() -> None:
     con.execute("CREATE INDEX IF NOT EXISTS ix_ruta_dom ON ruta(dominio)")
     con.commit()
 
+    # ---- resolve exactly one owner per plate --------------------------------
+    # A carrier often holds several operating licences and the same vehicle is
+    # attached to each, so a plate can carry several live links that all name the
+    # same CUIT. Collapse them to the most recent one, otherwise every join
+    # multiplies the plate.
+    print("[s9] resolving plate owners ...", flush=True)
+    con.executescript("""
+        DROP TABLE IF EXISTS plate_owner;
+        CREATE TABLE plate_owner AS
+        WITH live AS (
+            SELECT * FROM links
+            WHERE activo = 1 AND cuit IS NOT NULL AND cuit <> ''
+        ),
+        agg AS (
+            SELECT dominio, COUNT(*) AS n_links, COUNT(DISTINCT cuit) AS n_cuits
+            FROM live GROUP BY dominio
+        ),
+        ranked AS (
+            SELECT l.*, ROW_NUMBER() OVER (PARTITION BY l.dominio
+                                           ORDER BY l.fecha_alta DESC,
+                                                    l.link_id DESC) AS rn
+            FROM live l
+        )
+        SELECT r.dominio, r.cuit, r.razon_social, r.email, r.paut, r.jurisdiccion,
+               r.fecha_alta, r.fecha_baja, r.operador_id, a.n_links, a.n_cuits
+        FROM ranked r JOIN agg a ON a.dominio = r.dominio
+        WHERE r.rn = 1;
+        CREATE UNIQUE INDEX ix_po_dom ON plate_owner(dominio);
+        CREATE INDEX ix_po_cuit ON plate_owner(cuit);
+    """)
+    con.commit()
+    print(f"[s9] {'plate_owner':<26} "
+          f"{con.execute('SELECT COUNT(*) FROM plate_owner').fetchone()[0]:>9,} rows")
+
     # ---- derived view: one row per Argentine cargo plate -------------------
     print("[s9] building derived view v_vehiculos_carga ...", flush=True)
     types_sql = ",".join("'" + t.replace("'", "''") + "'" for t in CARGO_TYPES)
@@ -162,7 +208,8 @@ def main() -> None:
             l.jurisdiccion,
             l.fecha_alta            AS link_fecha_alta,
             l.fecha_baja            AS link_fecha_baja,
-            l.activo                AS link_activo,
+            CASE WHEN l.dominio IS NULL THEN 0 ELSE 1 END AS link_activo,
+            l.n_links, l.n_cuits,
             r.ruta_vigente,
             r.nro_constancia        AS ruta_constancia,
             r.nro_certificado       AS ruta_certificado,
@@ -170,8 +217,14 @@ def main() -> None:
             CASE WHEN a.cuit IS NOT NULL THEN 1 ELSE 0 END AS cuit_activo_arca,
             a.denominacion          AS arca_denominacion,
             a.imp_iva, a.imp_ganancias, a.empleador
-        FROM parque_movil pm
-        LEFT JOIN links l ON l.dominio = pm.dominio AND l.activo = 1
+        FROM (
+            -- a handful of plates appear twice (re-registration); keep the newest
+            SELECT * FROM parque_movil
+            WHERE parque_movil_id IN (
+                SELECT MAX(CAST(parque_movil_id AS INTEGER))
+                FROM parque_movil WHERE pais='AR' GROUP BY dominio)
+        ) pm
+        LEFT JOIN plate_owner l ON l.dominio = pm.dominio
         LEFT JOIN ruta  r ON r.dominio = pm.dominio
         LEFT JOIN arca_padron a ON a.cuit = l.cuit
         WHERE pm.pais = 'AR' AND pm.tipo_vehiculo IN ({types_sql});
