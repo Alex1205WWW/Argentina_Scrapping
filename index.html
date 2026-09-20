@@ -1,0 +1,514 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="data-mode" content="static">
+<title>Transporte de Cargas Argentina</title>
+<style>
+:root{
+  color-scheme: light;
+  --plane:#f9f9f7; --surface:#fcfcfb;
+  --ink:#0b0b0b; --ink-2:#52514e; --muted:#898781;
+  --grid:#e1e0d9; --axis:#c3c2b7; --border:rgba(11,11,11,.10);
+  --s1:#2a78d6; --s2:#eb6834; --s3:#1baf7a;
+  --good:#0ca30c; --warn:#fab219; --crit:#d03b3b;
+  --radius:10px;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    color-scheme: dark;
+    --plane:#0d0d0d; --surface:#1a1a19;
+    --ink:#fff; --ink-2:#c3c2b7; --muted:#898781;
+    --grid:#2c2c2a; --axis:#383835; --border:rgba(255,255,255,.10);
+    --s1:#3987e5; --s2:#d95926; --s3:#199e70;
+  }
+}
+:root[data-theme="dark"]{
+  color-scheme: dark;
+  --plane:#0d0d0d; --surface:#1a1a19;
+  --ink:#fff; --ink-2:#c3c2b7; --muted:#898781;
+  --grid:#2c2c2a; --axis:#383835; --border:rgba(255,255,255,.10);
+  --s1:#3987e5; --s2:#d95926; --s3:#199e70;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--plane);color:var(--ink);
+  font:14px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif;-webkit-font-smoothing:antialiased}
+.wrap{max-width:1280px;margin:0 auto;padding:24px 20px 64px}
+header{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;flex-wrap:wrap;margin-bottom:8px}
+h1{font-size:21px;font-weight:650;margin:0 0 4px;letter-spacing:-.01em}
+.sub{color:var(--ink-2);font-size:13px;margin:0}
+.btn{background:var(--surface);border:1px solid var(--border);color:var(--ink);
+  border-radius:8px;padding:7px 12px;font:inherit;font-size:13px;cursor:pointer}
+.btn:hover{border-color:var(--axis)}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:18px}
+h2{font-size:13px;font-weight:650;margin:0 0 2px;letter-spacing:.01em}
+.cap{font-size:12px;color:var(--muted);margin:0 0 14px}
+
+/* ---- hero answer tiles ---- */
+.hero{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:14px;margin:20px 0 14px}
+.hero .card{padding:20px 22px}
+.hero .lbl{font-size:12px;color:var(--ink-2);margin:0 0 10px;font-weight:550}
+.hero .fig{font-size:42px;font-weight:680;letter-spacing:-.02em;line-height:1;
+  font-variant-numeric:tabular-nums}
+.hero .note{font-size:12px;color:var(--muted);margin-top:10px}
+.hero .accent{height:3px;width:34px;border-radius:2px;background:var(--s1);margin-bottom:14px}
+.hero .accent.o{background:var(--s2)}
+
+/* ---- small stat strip ---- */
+.strip{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:22px}
+.stat{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:13px 15px}
+.stat b{display:block;font-size:20px;font-weight:640;font-variant-numeric:tabular-nums;letter-spacing:-.01em}
+.stat span{font-size:11.5px;color:var(--muted);display:block;margin-top:3px}
+
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(420px,1fr));gap:14px;margin-bottom:14px}
+svg{display:block;width:100%;overflow:visible}
+.gl{stroke:var(--grid);stroke-width:1}
+.ax{fill:var(--muted);font-size:11px}
+.vl{fill:var(--ink-2);font-size:11px;font-variant-numeric:tabular-nums}
+.bar{transition:opacity .12s}
+.bar:hover{opacity:.78}
+
+.legend{display:flex;gap:16px;flex-wrap:wrap;margin:0 0 12px;font-size:12px;color:var(--ink-2)}
+.legend i{width:9px;height:9px;border-radius:2px;display:inline-block;margin-right:6px;vertical-align:-1px}
+
+/* ---- tabs + tables ---- */
+.tabs{display:flex;gap:4px;margin:26px 0 14px;border-bottom:1px solid var(--border);flex-wrap:wrap}
+.tab{background:none;border:0;border-bottom:2px solid transparent;color:var(--ink-2);
+  padding:9px 14px;font:inherit;font-size:13px;cursor:pointer;margin-bottom:-1px}
+.tab[aria-selected="true"]{color:var(--ink);border-bottom-color:var(--s1);font-weight:600}
+.ctl{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:12px}
+input[type=search],select{background:var(--surface);border:1px solid var(--border);color:var(--ink);
+  border-radius:8px;padding:8px 11px;font:inherit;font-size:13px}
+input[type=search]{min-width:260px}
+label.chk{font-size:12.5px;color:var(--ink-2);display:flex;align-items:center;gap:6px;cursor:pointer}
+.tblwrap{overflow-x:auto;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface)}
+table{border-collapse:collapse;width:100%;font-size:12.5px}
+th,td{text-align:left;padding:9px 12px;border-bottom:1px solid var(--grid);white-space:nowrap}
+th{color:var(--muted);font-weight:600;font-size:11.5px;text-transform:uppercase;letter-spacing:.03em;
+  position:sticky;top:0;background:var(--surface)}
+tbody tr:hover{background:color-mix(in srgb,var(--s1) 6%,transparent)}
+td.num{text-align:right;font-variant-numeric:tabular-nums}
+.pill{display:inline-flex;align-items:center;gap:4px;font-size:11px;padding:2px 7px;border-radius:99px;
+  border:1px solid var(--border);color:var(--ink-2)}
+.pill.ok{color:var(--good);border-color:color-mix(in srgb,var(--good) 40%,transparent)}
+.pill.no{color:var(--crit);border-color:color-mix(in srgb,var(--crit) 40%,transparent)}
+.pager{display:flex;gap:10px;align-items:center;justify-content:flex-end;margin-top:12px;
+  font-size:12.5px;color:var(--ink-2)}
+.tip{position:fixed;pointer-events:none;background:var(--surface);border:1px solid var(--axis);
+  border-radius:7px;padding:7px 10px;font-size:12px;color:var(--ink);box-shadow:0 4px 14px rgba(0,0,0,.14);
+  opacity:0;transition:opacity .1s;z-index:50;white-space:nowrap}
+.hidden{display:none !important}
+.muted{color:var(--muted)}
+footer{margin-top:34px;color:var(--muted);font-size:12px;line-height:1.7}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <div>
+    <h1>Base de Datos de Transporte de Cargas &mdash; Argentina</h1>
+    <p class="sub">CNRT &middot; RUTA &middot; DNRPA &middot; ARCA &mdash; <span id="asof" class="muted"></span></p>
+  </div>
+  <div style="display:flex;gap:8px">
+    <a class="btn" id="lnk-findings" href="findings.html" style="text-decoration:none" hidden>Informe</a>
+    <button class="btn" id="theme">Tema</button>
+  </div>
+</header>
+
+<!-- the two selection-question answers -->
+<section class="hero">
+  <div class="card">
+    <div class="accent"></div>
+    <p class="lbl">Semirremolques con patente argentina (CNRT)</p>
+    <div class="fig" id="k-semi">&mdash;</div>
+    <p class="note" id="k-semi-note"></p>
+  </div>
+  <div class="card">
+    <div class="accent o"></div>
+    <p class="lbl">CUIT titulares de esos semirremolques, activos en ARCA</p>
+    <div class="fig" id="k-cuit">&mdash;</div>
+    <p class="note" id="k-cuit-note"></p>
+  </div>
+</section>
+
+<section class="strip" id="strip"></section>
+
+<section class="grid2">
+  <div class="card">
+    <h2>Parque de carga argentino por tipo de vehiculo</h2>
+    <p class="cap">Dominios unicos con pais = AR en el parque movil de CNRT.</p>
+    <div id="c-tipos"></div>
+  </div>
+  <div class="card">
+    <h2>Tipo de carroceria del semirremolque</h2>
+    <p class="cap">Diez carrocerias mas frecuentes sobre semirremolques argentinos.</p>
+    <div id="c-carr"></div>
+  </div>
+</section>
+
+<section class="grid2">
+  <div class="card">
+    <h2>Semirremolques argentinos por anio de modelo</h2>
+    <p class="cap">Distribucion del parque segun anio declarado.</p>
+    <div id="c-anios"></div>
+  </div>
+  <div class="card">
+    <h2>DNRPA &mdash; altas y bajas de semirremolques por anio</h2>
+    <p class="cap">Inscripciones iniciales y bajas registradas a nivel nacional, 2018&ndash;2026.</p>
+    <div class="legend" id="l-dnrpa"></div>
+    <div id="c-dnrpa"></div>
+  </div>
+</section>
+
+<section class="grid2">
+  <div class="card">
+    <h2>Titulares con mas semirremolques</h2>
+    <p class="cap">Vinculos dominio&ndash;CUIT vigentes en CNRT.</p>
+    <div id="c-top"></div>
+  </div>
+  <div class="card">
+    <h2>Semirremolques por pais de patente</h2>
+    <p class="cap">El registro CNRT incluye unidades MERCOSUR extranjeras; solo AR cuenta como argentino.</p>
+    <div id="c-pais"></div>
+  </div>
+</section>
+
+<section class="card" style="margin-bottom:14px">
+  <h2>DNRPA &mdash; inscripciones de semirremolques por provincia de registro</h2>
+  <p class="cap">Altas 2018&ndash;2026 segun el registro seccional que inscribio la unidad. Es la unica fuente publica con dimension provincial; DNRPA no publica dominio ni CUIT.</p>
+  <div id="c-prov"></div>
+</section>
+
+<div class="tabs" role="tablist">
+  <button class="tab" role="tab" aria-selected="true"  data-tab="carriers">Transportistas</button>
+  <button class="tab" role="tab" aria-selected="false" data-tab="vehicles">Vehiculos</button>
+  <button class="tab" role="tab" aria-selected="false" data-tab="sources">Fuentes</button>
+</div>
+
+<section id="p-carriers">
+  <div class="ctl">
+    <input type="search" id="q-car" placeholder="Buscar razon social, CUIT o email...">
+    <label class="chk"><input type="checkbox" id="f-arca"> Solo CUIT activo en ARCA</label>
+    <label class="chk"><input type="checkbox" id="f-semi"> Solo con semirremolques</label>
+    <a class="btn" href="#" data-export="carriers.csv" style="text-decoration:none">Descargar CSV</a>
+  </div>
+  <div class="tblwrap"><table id="t-car"><thead></thead><tbody></tbody></table></div>
+  <div class="pager" id="pg-car"></div>
+</section>
+
+<section id="p-vehicles" class="hidden">
+  <div class="ctl">
+    <input type="search" id="q-veh" placeholder="Buscar dominio, CUIT o titular...">
+    <select id="f-tipo">
+      <option value="">Todos los tipos de carga</option>
+      <option value="SEMIRREMOLQUE">Semirremolque</option>
+      <option value="TRACTOR">Tractor</option>
+      <option value="ACOPLADO">Acoplado</option>
+      <option value="BATEA">Batea</option>
+    </select>
+    <label class="chk"><input type="checkbox" id="f-ruta"> Solo RUTA vigente</label>
+    <a class="btn" href="#" data-export="fleet.csv" style="text-decoration:none">Descargar CSV</a>
+  </div>
+  <div class="tblwrap"><table id="t-veh"><thead></thead><tbody></tbody></table></div>
+  <div class="pager" id="pg-veh"></div>
+</section>
+
+<section id="p-sources" class="hidden">
+  <div class="tblwrap"><table id="t-src"><thead></thead><tbody></tbody></table></div>
+</section>
+
+<footer id="foot"></footer>
+</div>
+<div class="tip" id="tip"></div>
+
+<script>
+/* ?theme=light|dark pins the palette (shareable links, screenshots); otherwise the OS setting rules */
+{ const t = new URLSearchParams(location.search).get('theme');
+  if (t === 'light' || t === 'dark') document.documentElement.setAttribute('data-theme', t); }
+const $ = s => document.querySelector(s);
+const fmt = n => (n === null || n === undefined) ? '—' : n.toLocaleString('es-AR');
+
+/* ---------- data source ----------------------------------------------------
+   The same page runs in two modes:
+     live   - local FastAPI (ui/app.py) answers /api/* against freight.db
+     static - Netlify: s13_site.py pre-rendered data/*.json; search, filters
+              and pagination happen here in the browser
+   s13 switches the mode by injecting <meta name="data-mode" content="static">. */
+const STATIC = document.querySelector('meta[name="data-mode"]')?.content === 'static';
+
+function liveApi(){
+  const get = (path, params) =>
+    fetch(path + (params ? '?' + new URLSearchParams(params) : '')).then(r => r.json());
+  return {
+    stats: () => get('/api/stats'), charts: () => get('/api/charts'),
+    provenance: () => get('/api/provenance'),
+    carriers: p => get('/api/carriers', p), vehicles: p => get('/api/vehicles', p),
+    exportUrl: name => '/api/export/' + name,
+  };
+}
+
+function staticApi(){
+  const json = path => fetch(path).then(r => r.json());
+  const cache = {};
+  const table = name => {                       // array-of-arrays -> objects, loaded once
+    if (!cache[name]) cache[name] = json(`data/${name}.json`).then(t =>
+      t.rows.map(r => Object.fromEntries(t.columns.map((c, i) => [c, r[i]]))));
+    return cache[name];
+  };
+  const like = (v, q) => v != null && String(v).toLowerCase().includes(q);
+  const on = v => v === true || v === 'true';
+  const page = (rows, p) => {
+    const size = +p.size || 50, pg = Math.max(1, +p.page || 1);
+    return {rows: rows.slice((pg - 1) * size, pg * size), total: rows.length, page: pg, size};
+  };
+  return {
+    stats: () => json('data/stats.json'), charts: () => json('data/charts.json'),
+    provenance: () => json('data/provenance.json'),
+    carriers: async p => {                      // rows arrive pre-sorted by the builder
+      const q = (p.search || '').toLowerCase();
+      let rows = await table('carriers');
+      if (q) rows = rows.filter(r => like(r.razon_social, q) || like(r.cuit, q) || like(r.email, q));
+      if (on(p.solo_activos))  rows = rows.filter(r => r.activo_arca == 1);
+      if (on(p.solo_con_semi)) rows = rows.filter(r => r.semirremolques > 0);
+      return page(rows, p);
+    },
+    vehicles: async p => {
+      const q = (p.search || '').toLowerCase();
+      let rows = await table('vehicles');
+      if (p.tipo) rows = rows.filter(r => r.tipo_vehiculo === p.tipo);
+      if (q) rows = rows.filter(r => like(r.dominio, q) || like(r.cuit, q) || like(r.razon_social, q));
+      if (on(p.solo_ruta)) rows = rows.filter(r => r.ruta == 1);
+      return page(rows, p);
+    },
+    exportUrl: name => 'downloads/' + name,
+  };
+}
+
+const api = STATIC ? staticApi() : liveApi();
+const tip = $('#tip');
+function showTip(e, html){ tip.innerHTML = html; tip.style.opacity = 1;
+  tip.style.left = Math.min(e.clientX + 14, innerWidth - tip.offsetWidth - 10) + 'px';
+  tip.style.top  = (e.clientY - 34) + 'px'; }
+function hideTip(){ tip.style.opacity = 0; }
+
+/* ---------- horizontal bar: magnitude, one series ---------- */
+function hbar(el, data, opts={}){
+  const labelW = opts.labelW || 150, rowH = 26, gap = 2, padR = 62;
+  const W = el.clientWidth || 560, H = data.length * rowH + 8;
+  const max = Math.max(1, ...data.map(d => d.value));
+  const plotW = W - labelW - padR;
+  const color = opts.color || 'var(--s1)';
+  let s = `<svg viewBox="0 0 ${W} ${H}" role="img">`;
+  data.forEach((d, i) => {
+    const y = i * rowH, bh = rowH - gap * 2 - 6;
+    const w = Math.max(2, d.value / max * plotW);
+    const lbl = String(d.label ?? '—');
+    s += `<text class="ax" x="${labelW - 10}" y="${y + rowH/2 + 4}" text-anchor="end">`
+       + `${lbl.length > 22 ? lbl.slice(0,21)+'…' : lbl}</text>`;
+    s += `<rect class="bar" x="${labelW}" y="${y + 5}" width="${w}" height="${bh}" rx="4"`
+       + ` fill="${color}" data-i="${i}"><title></title></rect>`;
+    s += `<text class="vl" x="${labelW + w + 8}" y="${y + rowH/2 + 4}">${fmt(d.value)}</text>`;
+  });
+  s += `</svg>`;
+  el.innerHTML = s;
+  el.querySelectorAll('rect.bar').forEach(r => {
+    const d = data[+r.dataset.i];
+    r.addEventListener('mousemove', e => showTip(e,
+      `<b>${d.label ?? '—'}</b><br>${fmt(d.value)} ${opts.unit || 'unidades'}`));
+    r.addEventListener('mouseleave', hideTip);
+  });
+}
+
+/* round an axis maximum up to a readable step (1/2/2.5/5 x 10^n) */
+function niceMax(v, ticks){
+  const rough = v / ticks;
+  const mag = Math.pow(10, Math.floor(Math.log10(rough)));
+  const step = [1, 2, 2.5, 5, 10].find(m => m * mag >= rough) * mag;
+  return step * ticks;
+}
+
+/* ---------- column chart, optional 2 series ---------- */
+function cols(el, cats, series, opts={}){
+  const W = el.clientWidth || 560, H = opts.h || 230;
+  const padL = 52, padB = 26, padT = 10, padR = 6;
+  const plotW = W - padL - padR, plotH = H - padB - padT;
+  const raw = Math.max(1, ...series.flatMap(s => s.values));
+  const max = niceMax(raw, 4);
+  const step = plotW / cats.length;
+  const n = series.length;
+  const bw = Math.max(2, step / n - 2);
+  const ticks = 4;
+  let s = `<svg viewBox="0 0 ${W} ${H}" role="img">`;
+  for (let t = 0; t <= ticks; t++){
+    const v = max * t / ticks, y = padT + plotH - plotH * t / ticks;
+    s += `<line class="gl" x1="${padL}" y1="${y}" x2="${W - padR}" y2="${y}"/>`;
+    s += `<text class="ax" x="${padL - 8}" y="${y + 4}" text-anchor="end">${fmt(Math.round(v))}</text>`;
+  }
+  const every = Math.ceil(cats.length / 14);
+  cats.forEach((c, i) => {
+    if (i % every === 0)
+      s += `<text class="ax" x="${padL + step*i + step/2}" y="${H - 8}" text-anchor="middle">${c}</text>`;
+    series.forEach((se, j) => {
+      const v = se.values[i] || 0;
+      const h = Math.max(v > 0 ? 2 : 0, v / max * plotH);
+      const x = padL + step*i + (step - bw*n - 2*(n-1))/2 + j*(bw+2);
+      if (h > 0) s += `<rect class="bar" x="${x}" y="${padT + plotH - h}" width="${bw}" height="${h}"`
+                    + ` rx="3" fill="${se.color}" data-i="${i}" data-j="${j}"/>`;
+    });
+  });
+  s += `<line class="gl" x1="${padL}" y1="${padT+plotH}" x2="${W-padR}" y2="${padT+plotH}" stroke="var(--axis)"/></svg>`;
+  el.innerHTML = s;
+  el.querySelectorAll('rect.bar').forEach(r => {
+    const i = +r.dataset.i, j = +r.dataset.j;
+    r.addEventListener('mousemove', e => showTip(e,
+      `<b>${cats[i]}</b><br>${series[j].name}: ${fmt(series[j].values[i])}`));
+    r.addEventListener('mouseleave', hideTip);
+  });
+}
+
+/* ---------- data load ---------- */
+let STATS = null, CHARTS = null;
+async function load(){
+  [STATS, CHARTS] = await Promise.all([api.stats(), api.charts()]);
+  render();
+}
+
+/* draw everything from the cached payloads - resize and theme changes only re-render */
+function render(){
+  const s = STATS, c = CHARTS;
+  if (!s || !c) return;
+  $('#k-semi').textContent = fmt(s.semirremolques_ar);
+  $('#k-semi-note').textContent = (s.semirremolques_ruta_vigente
+    ? `${fmt(s.semirremolques_ruta_vigente)} con RUTA vigente confirmada sobre ${fmt(s.semirremolques_ruta_consultados)} consultados. `
+    : `Validacion RUTA en curso: ${fmt(s.semirremolques_ruta_consultados)} consultados. `)
+    + `Excluidos ${fmt(s.semirremolques_invalidos)} dominios con formato invalido o de relleno.`;
+  $('#k-cuit').textContent = fmt(s.cuits_titulares_semi_activos_arca);
+  $('#k-cuit-note').textContent =
+    `${fmt(s.cuits_titulares_semi)} CUIT titulares detectados; ${fmt(s.cuits_titulares_semi_activos_arca)} figuran en el padron ARCA.`;
+
+  $('#strip').innerHTML = [
+    ['Parque movil CNRT', s.parque_total], ['Dominios argentinos', s.parque_ar],
+    ['Tractores AR', s.tractores_ar], ['Empresas CNRT', s.empresas_cnrt],
+    ['Habilitaciones de carga', s.operadores_cargas], ['CUIT de carga', s.cuits_cargas],
+    ['Emails validados', s.emails], ['Permisos MERCOSUR', s.permisos],
+    ['Padron ARCA', s.arca_padron],
+  ].map(([l, v]) => `<div class="stat"><b>${fmt(v)}</b><span>${l}</span></div>`).join('');
+
+  hbar($('#c-tipos'), c.tipos, {unit:'dominios'});
+  hbar($('#c-carr'), c.carroceria, {color:'var(--s3)', unit:'semirremolques'});
+  hbar($('#c-pais'), c.paises, {labelW:60, color:'var(--s3)', unit:'semirremolques'});
+  hbar($('#c-top'), c.top_carriers, {labelW:190, color:'var(--s1)', unit:'semirremolques'});
+  hbar($('#c-prov'), c.provincias, {labelW:170, color:'var(--s1)', unit:'inscripciones'});
+
+  const ys = c.anios.map(d => +d.label);
+  cols($('#c-anios'), ys, [{name:'Semirremolques', color:'var(--s1)',
+        values:c.anios.map(d => d.value)}], {h:220});
+
+  const years = [...new Set(c.dnrpa.map(d => d.label))].sort();
+  const pick = op => years.map(y => (c.dnrpa.find(d => d.label===y && d.operacion===op)||{}).value || 0);
+  $('#l-dnrpa').innerHTML =
+     `<span><i style="background:var(--s1)"></i>Inscripciones iniciales</span>`
+   + `<span><i style="background:var(--s2)"></i>Bajas</span>`;
+  cols($('#c-dnrpa'), years, [
+    {name:'Inscripciones', color:'var(--s1)', values:pick('inscripcion')},
+    {name:'Bajas',         color:'var(--s2)', values:pick('baja')}], {h:220});
+
+  $('#asof').textContent = 'Datos extraidos ' +
+    (s.generated_at ? new Date(s.generated_at) : new Date()).toLocaleDateString('es-AR');
+  $('#foot').innerHTML =
+    'Fuentes: CNRT (api.cnrt.gob.ar/seop/public, consultapme.cnrt.gob.ar), '
+  + 'RUTA via CNRT, DNRPA via datos.gob.ar, padron ARCA (afip.gob.ar). '
+  + 'Un CUIT se considera activo cuando figura en el padron masivo de constancias de ARCA.';
+}
+
+/* ---------- tables ---------- */
+const flag = v => v ? '<span class="pill ok">SI</span>' : '<span class="pill no">NO</span>';
+const state = {car:{page:1}, veh:{page:1}};
+
+async function loadCarriers(){
+  const d = await api.carriers({search:$('#q-car').value, page:state.car.page, size:50,
+    solo_activos:$('#f-arca').checked, solo_con_semi:$('#f-semi').checked});
+  $('#t-car thead').innerHTML = '<tr>'+['CUIT','Razon social','Email','PAUT','ARCA',
+    'Semirr.','Tractores','Flota'].map(h=>`<th>${h}</th>`).join('')+'</tr>';
+  $('#t-car tbody').innerHTML = d.rows.map(r => `<tr>
+    <td>${r.cuit||''}</td><td>${r.razon_social||''}</td>
+    <td class="muted">${r.email||'—'}</td><td>${r.paut||'—'}</td>
+    <td>${flag(r.activo_arca)}</td>
+    <td class="num">${fmt(r.semirremolques)}</td>
+    <td class="num">${fmt(r.tractores)}</td>
+    <td class="num">${fmt(r.vehiculos)}</td></tr>`).join('')
+    || '<tr><td colspan="8" class="muted">Sin resultados</td></tr>';
+  pager('#pg-car', d, state.car, loadCarriers);
+}
+
+async function loadVehicles(){
+  const d = await api.vehicles({search:$('#q-veh').value, tipo:$('#f-tipo').value,
+    page:state.veh.page, size:50, solo_ruta:$('#f-ruta').checked});
+  $('#t-veh thead').innerHTML = '<tr>'+['Dominio','Tipo','Anio','Marca','Carroceria','Ejes',
+    'CUIT titular','Razon social','RUTA','ARCA'].map(h=>`<th>${h}</th>`).join('')+'</tr>';
+  $('#t-veh tbody').innerHTML = d.rows.map(r => `<tr>
+    <td><b>${r.dominio}</b></td><td>${r.tipo_vehiculo||''}</td>
+    <td class="num">${r.anio_modelo||'—'}</td><td>${r.marca||'—'}</td>
+    <td>${r.tipo_carroceria||'—'}</td><td class="num">${r.cantidad_ejes||'—'}</td>
+    <td>${r.cuit||'<span class="muted">sin vinculo</span>'}</td>
+    <td>${r.razon_social||'—'}</td>
+    <td>${r.ruta===null?'<span class="pill">s/c</span>':flag(r.ruta)}</td>
+    <td>${r.cuit?flag(r.activo_arca):'—'}</td></tr>`).join('')
+    || '<tr><td colspan="10" class="muted">Sin resultados</td></tr>';
+  pager('#pg-veh', d, state.veh, loadVehicles);
+}
+
+async function loadSources(){
+  const d = await api.provenance();
+  $('#t-src thead').innerHTML = '<tr>'+['Fuente','Recurso','Tabla','Filas','Aporta']
+    .map(h=>`<th>${h}</th>`).join('')+'</tr>';
+  $('#t-src tbody').innerHTML = d.map(r => `<tr><td><b>${r.fuente}</b></td>
+    <td class="muted">${r.recurso}</td><td>${r.tabla}</td>
+    <td class="num">${fmt(r.filas)}</td>
+    <td style="white-space:normal">${r.aporta}</td></tr>`).join('');
+}
+
+function pager(sel, d, st, fn){
+  const pages = Math.max(1, Math.ceil(d.total / d.size));
+  $(sel).innerHTML = `<span>${fmt(d.total)} registros &middot; pagina ${d.page} de ${fmt(pages)}</span>
+    <button class="btn" ${d.page<=1?'disabled':''} data-go="-1">Anterior</button>
+    <button class="btn" ${d.page>=pages?'disabled':''} data-go="1">Siguiente</button>`;
+  $(sel).querySelectorAll('[data-go]').forEach(b => b.onclick = () => {
+    st.page = Math.max(1, st.page + (+b.dataset.go)); fn();
+  });
+}
+
+/* ---------- wiring ---------- */
+let t;
+const debounce = fn => () => { clearTimeout(t); t = setTimeout(fn, 280); };
+$('#q-car').oninput = debounce(() => { state.car.page = 1; loadCarriers(); });
+$('#q-veh').oninput = debounce(() => { state.veh.page = 1; loadVehicles(); });
+['#f-arca','#f-semi'].forEach(s => $(s).onchange = () => { state.car.page=1; loadCarriers(); });
+['#f-tipo','#f-ruta'].forEach(s => $(s).onchange = () => { state.veh.page=1; loadVehicles(); });
+
+document.querySelectorAll('.tab').forEach(b => b.onclick = () => {
+  document.querySelectorAll('.tab').forEach(x => x.setAttribute('aria-selected', x === b));
+  ['carriers','vehicles','sources'].forEach(n =>
+    $('#p-'+n).classList.toggle('hidden', n !== b.dataset.tab));
+  if (b.dataset.tab === 'vehicles') loadVehicles();
+  if (b.dataset.tab === 'sources')  loadSources();
+});
+
+$('#theme').onclick = () => {
+  const cur = document.documentElement.getAttribute('data-theme');
+  const next = cur === 'dark' ? 'light' : cur === 'light' ? 'dark'
+    : (matchMedia('(prefers-color-scheme: dark)').matches ? 'light' : 'dark');
+  document.documentElement.setAttribute('data-theme', next);
+  render();
+};
+addEventListener('resize', debounce(render));
+
+document.querySelectorAll('a[data-export]').forEach(a => a.href = api.exportUrl(a.dataset.export));
+$('#lnk-findings').hidden = !STATIC;
+
+load(); loadCarriers();
+</script>
+</body>
+</html>

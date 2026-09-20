@@ -1,0 +1,14 @@
+# Netlify deploys the `site` branch as-is: no build step, publish the root.
+[build]
+  publish = "."
+  command = ""
+
+[[headers]]
+  for = "/data/*"
+  [headers.values]
+    Cache-Control = "public, max-age=3600"
+
+[[headers]]
+  for = "/downloads/*"
+  [headers.values]
+    Cache-Control = "public, max-age=3600"
