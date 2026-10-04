@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="es"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Findings - Transporte de Cargas Argentina</title>
+<style>
+ body{max-width:880px;margin:40px auto;padding:0 20px;background:#f9f9f7;color:#0b0b0b;
+      font:15px/1.6 system-ui,-apple-system,"Segoe UI",sans-serif}
+ a{color:#2a78d6} table{border-collapse:collapse;margin:12px 0;font-size:14px}
+ td,th{border:1px solid #e1e0d9;padding:6px 10px;text-align:left} code{font-size:13px}
+ @media (prefers-color-scheme:dark){body{background:#0d0d0d;color:#fff} td,th{border-color:#2c2c2a} a{color:#3987e5}}
+</style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.2/marked.min.js"></script>
+</head><body>
+<p><a href="index.html">&larr; Dashboard</a> &middot; <a href="downloads/FINDINGS.md">Markdown</a>
+ &middot; <a href="downloads/semirremolques_activos.csv">semirremolques_activos.csv</a></p>
+<div id="md">Cargando&hellip;</div>
+<script>
+fetch('downloads/FINDINGS.md').then(r => r.text()).then(t => {
+  const el = document.getElementById('md');
+  if (window.marked) el.innerHTML = marked.parse(t);
+  else { const pre = document.createElement('pre'); pre.textContent = t; el.replaceChildren(pre); }
+});
+</script></body></html>
